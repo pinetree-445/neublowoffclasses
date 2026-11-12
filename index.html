@@ -643,7 +643,7 @@ html[data-theme="dark"] .tabbar { box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45); }
 .drill-chapter.selected .chapter-no { border-color: var(--primary); color: var(--primary); }
 .chapter-open {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 13px;
-  padding: 14px 4px 14px 15px; background: transparent; border: 0;
+  padding: 14px 15px; background: transparent; border: 0;
   text-align: left; color: inherit; font: inherit; cursor: pointer;
 }
 .chapter-check-btn {
@@ -728,6 +728,23 @@ html[data-theme="dark"] .tabbar { box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45); }
 .quiz-head .count i { font-style: normal; opacity: 0.55; }
 .quiz-body { flex: 1; padding: 15px 16px 128px; }
 .quiz-card { padding: 18px 17px 20px; border-radius: var(--r-lg); }
+@keyframes answerOk {
+  0% { box-shadow: 0 0 0 0 rgba(35, 180, 110, .0); }
+  35% { box-shadow: 0 0 0 4px rgba(35, 180, 110, .16), 0 8px 24px rgba(35, 180, 110, .10); }
+  100% { box-shadow: 0 0 0 0 rgba(35, 180, 110, .0); }
+}
+@keyframes answerNo {
+  0%, 100% { transform: translateX(0); }
+  18% { transform: translateX(-4px); }
+  36% { transform: translateX(4px); }
+  54% { transform: translateX(-3px); }
+  72% { transform: translateX(3px); }
+}
+.quiz-card.feedback-correct { animation: answerOk .5s ease; }
+.quiz-card.feedback-wrong { animation: answerNo .42s ease; }
+@media (prefers-reduced-motion: reduce) {
+  .quiz-card.feedback-correct, .quiz-card.feedback-wrong { animation: none; }
+}
 .q-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
 .q-meta .chip { height: 24px; padding: 0 8px; font-size: 10.5px; }
 .q-meta .star-btn { margin-left: auto; }
@@ -64739,10 +64756,31 @@ window.SAMPLE_BANK = {
     }, 2100);
   }
 
-  function haptic(ms) {
+  function haptic(pattern) {
+    if (Store.settings.haptics === false) return;
+    const seq = Array.isArray(pattern) ? pattern : [Number(pattern) || 8];
     try {
-      if (navigator.vibrate && Store.settings.haptics !== false) navigator.vibrate(ms || 8);
+      if (window.AndroidHaptic && typeof window.AndroidHaptic.vibrate === 'function') {
+        window.AndroidHaptic.vibrate(seq.join(','));
+        return;
+      }
+      if (navigator.vibrate) navigator.vibrate(seq);
     } catch (e) {}
+  }
+
+  function answerFeedback(correct) {
+    haptic(correct ? [12, 32, 16] : [48, 48, 48]);
+    // paint() 会替换题目卡，等下一帧再挂动画类
+    setTimeout(() => {
+      try {
+        const card = document.querySelector('.quiz-card');
+        if (!card) return;
+        card.classList.remove('feedback-correct', 'feedback-wrong');
+        void card.offsetWidth;
+        card.classList.add(correct ? 'feedback-correct' : 'feedback-wrong');
+        setTimeout(() => card.classList.remove('feedback-correct', 'feedback-wrong'), 520);
+      } catch (e) {}
+    }, 0);
   }
 
   let escHandler = null;
@@ -64863,7 +64901,7 @@ window.SAMPLE_BANK = {
     iconStars, ring, clamp, pct, uid, shuffle, sample, startOfDay, dayKey, addDays,
     formatClock, formatDuration, formatDate, formatDateTime, relTime, greeting,
     normalizeAnswer, checkFill, typeLabel, typeIcon, correctAnswerText, answerForCheck,
-    isCorrect, scoreSubjective, normalizeAnswerText, toast, haptic, openSheet, closeOverlay, confirmDialog, promptDialog,
+    isCorrect, scoreSubjective, normalizeAnswerText, toast, haptic, answerFeedback, openSheet, closeOverlay, confirmDialog, promptDialog,
     download, readFile, debounce, mathCache, safeReplaceState
   };
 })();
@@ -64984,6 +65022,7 @@ window.SAMPLE_BANK = {
     records: 'mathesis.records.v1',
     activity: 'mathesis.activity.v1',
     session: 'mathesis.session.v1',
+    redo: 'mathesis.redo.v1',
     profile: 'mathesis.profile.v1'
   };
 
@@ -65021,6 +65060,7 @@ window.SAMPLE_BANK = {
     records: [],
     activity: {},
     session: null,
+    redo: {},
     profile: Object.assign({}, DEFAULT_PROFILE)
   };
 
@@ -65254,6 +65294,7 @@ window.SAMPLE_BANK = {
     state.records = read(KEY.records, []) || [];
     state.activity = read(KEY.activity, {}) || {};
     state.session = read(KEY.session, null) || null;
+    state.redo = read(KEY.redo, {}) || {};
     state.profile = Object.assign({}, DEFAULT_PROFILE, read(KEY.profile, {}));
     if (!state.profile.createdAt) {
       state.profile.createdAt = Date.now();
@@ -65539,6 +65580,17 @@ window.SAMPLE_BANK = {
   function clearSession() {
     state.session = null;
     try { localStorage.removeItem(KEY.session); } catch (e) {}
+  }
+  function markRedo(qid) {
+    if (!qid) return;
+    state.redo[qid] = Date.now();
+    write(KEY.redo, state.redo);
+  }
+  function consumeRedo(qid) {
+    if (!qid || !state.redo[qid]) return false;
+    delete state.redo[qid];
+    write(KEY.redo, state.redo);
+    return true;
   }
   function finishSession(opts) {
     const s = state.session;
@@ -65891,7 +65943,8 @@ window.SAMPLE_BANK = {
       mistakes: state.mistakes,
       notes: state.notes,
       records: state.records,
-      activity: state.activity
+      activity: state.activity,
+      redo: state.redo
     };
   }
 
@@ -65906,6 +65959,7 @@ window.SAMPLE_BANK = {
     if (raw.notes) { state.notes = raw.notes; write(KEY.notes, state.notes); }
     if (raw.records) { state.records = raw.records; write(KEY.records, state.records); }
     if (raw.activity) { state.activity = raw.activity; write(KEY.activity, state.activity); }
+    if (raw.redo) { state.redo = raw.redo; write(KEY.redo, state.redo); }
     return true;
   }
 
@@ -65915,10 +65969,12 @@ window.SAMPLE_BANK = {
     state.records = [];
     state.mistakes = {};
     state.session = null;
+    state.redo = {};
     write(KEY.progress, state.progress);
     write(KEY.activity, state.activity);
     write(KEY.records, state.records);
     write(KEY.mistakes, state.mistakes);
+    write(KEY.redo, state.redo);
     try { localStorage.removeItem(KEY.session); } catch (e) {}
     if (!keep) {
       state.favorites = [];
@@ -65943,6 +65999,7 @@ window.SAMPLE_BANK = {
     notesFor, addNote, updateNote, deleteNote,
     recentRecords, examRecords, practiceRecords,
     startSession, saveSession, getSession, clearSession, finishSession,
+    markRedo, consumeRedo,
     collectQuestions, filterScope, buildPool, buildExamPaper, buildChapterPlan,
     chapterStats, subjectStats, overall, todayStats, weekStats, streak, activeDays, totalStudyMs,
     weakChapters, recentChapters, recentBySubject, heatmap, subjectProgressList,
@@ -66718,22 +66775,17 @@ window.SAMPLE_BANK = {
     mount(root, route) {
       const subs = Store.bank.subjects;
       let sid = (route.query.s && Store.getSubject(route.query.s)) ? route.query.s : subs[0].id;
-      const state = { mode: 'sequence', selected: new Set() };
+      const state = { mode: 'sequence' };
 
       function chapters() {
         const s = Store.getSubject(sid);
         return s ? s.chapters : [];
       }
 
-      function resetContent() {
-        state.selected = new Set(chapters().map((c) => c.id));
-      }
-
       function contentHTML() {
         const s = Store.getSubject(sid);
         const st = Store.subjectStats(sid);
         const mode = modeInfo(state.mode);
-        const selectedCount = state.selected.size;
         const subTotal = s.chapters.reduce((n, c) => n + c.questions.filter((q) => q.type === 'short' || q.type === 'essay').length, 0);
         const groups = [];
         chapters().forEach((c) => {
@@ -66744,18 +66796,15 @@ window.SAMPLE_BANK = {
         });
         const chapterRow = (c) => {
           const cs = Store.chapterStats(c.id);
-          const on = state.selected.has(c.id);
           const subN = c.questions.filter((q) => q.type === 'short' || q.type === 'essay').length;
-          return '<div class="chapter-row drill-chapter ' + (on ? 'selected' : '') + '">' +
+          return '<div class="chapter-row drill-chapter">' +
             '<button class="chapter-open" data-start-chapter="' + c.id + '">' +
             '<span class="chapter-no ' + (cs.progress >= 100 ? 'done' : '') + '">' + U.escapeHtml(c.no) + '</span>' +
             '<span class="chapter-main"><b>' + U.escapeHtml(c.title) + '</b>' +
             '<span class="sub">' + cs.total + ' 题<i></i>' + (cs.done ? '已做 ' + cs.done : '未开始') + (cs.attempts ? '<i></i>正确率 ' + cs.accuracy + '%' : '') + (subN ? '<i></i>主观 ' + subN : '') + '</span></span>' +
             '<span class="chapter-prog"><b>' + cs.progress + '%</b><span>' + cs.done + '/' + cs.total + '</span>' +
             '<span class="bar"><i style="width:' + cs.progress + '%"></i></span></span>' +
-            '<span class="chapter-go">' + U.icon('play') + '</span></button>' +
-            '<button class="chapter-check-btn" data-chapter="' + c.id + '" aria-label="选择章节">' +
-            U.icon(on ? 'checkCircleFill' : 'plus') + '</button></div>';
+            '<span class="chapter-go">' + U.icon('play') + '</span></button></div>';
         };
         return '<div class="subject-tabs" id="drill-subjects">' +
           subs.map((x) => {
@@ -66765,21 +66814,20 @@ window.SAMPLE_BANK = {
           }).join('') + '</div>' +
           '<div class="subject-hero">' +
           '<div><h2>' + U.escapeHtml(s.name) + '</h2>' +
-          '<p class="tiny muted" style="margin:5px 0 0">' + s.chapters.length + ' 个章节 · 已选 ' + selectedCount + ' 个 · 共 ' + st.total + ' 题 · 主观题 ' + subTotal + ' 道</p></div>' +
+          '<p class="tiny muted" style="margin:5px 0 0">' + s.chapters.length + ' 个章节 · 共 ' + st.total + ' 题 · 主观题 ' + subTotal + ' 道</p></div>' +
           '<div class="meta"><div><b>' + st.total + '</b><span>题目总数</span></div>' +
-          '<div><b>' + selectedCount + '</b><span>已选章节</span></div>' +
+          '<div><b>' + s.chapters.length + '</b><span>章节总数</span></div>' +
           '<div><b>' + st.done + '</b><span>已完成</span></div>' +
           '<div><b>' + st.accuracy + '%</b><span>正确率</span></div></div>' +
           '<div class="bar"><i style="width:' + st.progress + '%"></i></div></div>' +
 
-          '<div class="section"><div class="section-head"><div><h2>选择章节</h2>' +
-          '<div class="sub">当前模式：' + U.escapeHtml(mode.name) + ' · 勾选后点击章节开始</div></div>' +
-          '<button class="btn xs ghost" data-reset>重置</button></div>' +
+          '<div class="section"><div class="section-head"><div><h2>章节目录</h2>' +
+          '<div class="sub">当前模式：' + U.escapeHtml(mode.name) + ' · 点击章节开始</div></div></div>' +
           groups.map((g) => '<div class="chapter-group"><h3>' + U.escapeHtml(g.name) + '</h3>' +
             '<div class="card list-card">' + g.chapters.map(chapterRow).join('') + '</div></div>').join('') +
           '</div>' +
           '<p class="tiny muted" style="margin:12px 4px 24px;line-height:1.7">' +
-          '点击章节名称即从该章开始，后续勾选章节会按顺序继续。右侧圆圈用于增减章节，不影响当前点击的起始章节。</p>';
+          '点击章节即从该章开始，后续章节会按顺序继续。</p>';
       }
 
       function bind() {
@@ -66787,33 +66835,23 @@ window.SAMPLE_BANK = {
         body.querySelectorAll('[data-mode]').forEach((b) => {
           b.onclick = () => {
             state.mode = b.dataset.mode;
-            resetContent();
             paint();
           };
         });
         body.querySelectorAll('[data-subject]').forEach((b) => {
           b.onclick = () => {
             sid = b.dataset.subject;
-            resetContent();
-            paint();
-          };
-        });
-        body.querySelectorAll('[data-chapter]').forEach((b) => {
-          b.onclick = () => {
-            const id = b.dataset.chapter;
-            if (state.selected.has(id)) state.selected.delete(id); else state.selected.add(id);
             paint();
           };
         });
         body.querySelectorAll('[data-start-chapter]').forEach((b) => {
           b.onclick = () => {
             const cid = b.dataset.startChapter;
-            if (!state.selected.has(cid)) state.selected.add(cid);
             const mode = modeInfo(state.mode);
             const subject = Store.getSubject(sid);
             App.startChapterPractice({
               subjectId: sid,
-              chapterIds: Array.from(state.selected),
+              chapterIds: subject.chapters.map((c) => c.id),
               startChapterId: cid,
               scope: state.mode === 'wrong' ? 'wrong' : state.mode === 'starred' ? 'starred' : 'all',
               mode: state.mode === 'read' ? 'read' : 'practice',
@@ -66822,8 +66860,6 @@ window.SAMPLE_BANK = {
             });
           };
         });
-        const reset = body.querySelector('[data-reset]');
-        if (reset) reset.onclick = () => { resetContent(); paint(); };
       }
 
       function paint() {
@@ -66837,7 +66873,6 @@ window.SAMPLE_BANK = {
         U.applyIcons(body);
       }
 
-      resetContent();
       paint();
     }
   };
@@ -67010,11 +67045,24 @@ window.Views.bank = window.Views.drill;
       '</div>' + progressLine;
   }
 
+  function applyRedoState(x, qid) {
+    delete x.answers[qid];
+    delete x.submitted[qid];
+    delete x.correct[qid];
+    if (x.subjectiveScores) delete x.subjectiveScores[qid];
+    if (x.revealed) delete x.revealed[qid];
+  }
+
   function paint() {
     const x = s();
     if (!x || !rootEl) return;
     const q = currentQ();
     if (!q) { U.toast('题目数据缺失', 'error'); return; }
+    if (Store.consumeRedo(q.id)) {
+      applyRedoState(x, q.id);
+      save();
+      U.toast('本题已重置为未做状态', 'info');
+    }
     if (lastQid !== q.id) { lastQid = q.id; questionStart = Date.now(); }
     const head = rootEl.querySelector('#quiz-head');
     const card = rootEl.querySelector('#qcard');
@@ -67056,7 +67104,7 @@ window.Views.bank = window.Views.drill;
       x.elapsedMs = (x.elapsedMs || 0) + ms;
       Store.recordAnswer(q, correct, ms);
       save();
-      U.haptic(12);
+      U.answerFeedback(correct);
       paint();
       return;
     }
@@ -67080,7 +67128,7 @@ window.Views.bank = window.Views.drill;
     x.elapsedMs = (x.elapsedMs || 0) + ms;
     Store.recordAnswer(q, correct, ms);
     save();
-    U.haptic(correct ? 12 : 24);
+    U.answerFeedback(correct);
     paint();
     if (correct && Store.settings.autoAdvance && x.index < x.questionIds.length - 1) {
       if (advanceTimer) clearTimeout(advanceTimer);
@@ -67232,7 +67280,7 @@ window.Views.bank = window.Views.drill;
         '<button class="list-row" data-more="remove-mistake" style="width:100%;text-align:left"><span class="list-ico red">' + U.icon('trash') +
         '</span><span class="list-main"><b>移出错题本</b><span>同时清除该题的错题记录</span></span></button>' : '') +
       (x.kind === 'practice' ? '<button class="list-row" data-more="redo" style="width:100%;text-align:left"><span class="list-ico violet">' + U.icon('refresh') +
-        '</span><span class="list-main"><b>重做本题</b><span>清除本题的作答与判题结果</span></span></button>' : '') +
+        '</span><span class="list-main"><b>下次重做本题</b><span>退出本次练习后自动清空为未做状态</span></span></button>' : '') +
       '<button class="list-row" data-more="' + (x.kind === 'exam' ? 'submit' : 'finish') + '" style="width:100%;text-align:left"><span class="list-ico orange">' +
       U.icon(x.kind === 'exam' ? 'check' : 'flag') + '</span><span class="list-main"><b>' + (x.kind === 'exam' ? '交卷' : '结束练习') +
       '</b><span>' + (x.kind === 'exam' ? '提交本次考试并查看成绩' : '结束并查看本次练习统计') + '</span></span></button>' +
@@ -67254,9 +67302,9 @@ window.Views.bank = window.Views.drill;
             } else if (act === 'remove-mistake') {
               Store.removeMistake(q.id); U.closeOverlay(); U.toast('已移出错题本'); paint();
             } else if (act === 'redo') {
-              delete x.submitted[q.id]; delete x.correct[q.id]; delete x.answers[q.id];
-              if (x.revealed) delete x.revealed[q.id];
-              save(); U.closeOverlay(); paint();
+              Store.markRedo(q.id);
+              U.closeOverlay();
+              U.toast('已标记，退出本次练习后自动重置', 'info');
             } else if (act === 'finish') {
               U.closeOverlay(); finishPractice();
             } else if (act === 'submit') {
@@ -67485,6 +67533,20 @@ window.Views.bank = window.Views.drill;
       App.onCleanup(() => {
         if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer = null; }
         if (examTimer) { clearInterval(examTimer); examTimer = null; }
+        const x = s();
+        if (x && x.kind === 'practice') {
+          let changed = false;
+          x.questionIds.forEach((qid) => {
+            if (Store.consumeRedo(qid)) {
+              applyRedoState(x, qid);
+              changed = true;
+            }
+          });
+          if (changed) {
+            save();
+            U.toast('已退出练习，标记的题目已重置', 'info');
+          }
+        }
         rootEl = null;
       });
     }
