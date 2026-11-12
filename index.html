@@ -406,6 +406,61 @@ html[data-theme="dark"] .tabbar { box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45); }
 .continue .go { color: var(--primary); }
 .continue .go svg { width: 19px; height: 19px; }
 
+/* ---------- subject carousel ---------- */
+.continue-section .section-head { align-items: flex-start; }
+.carousel-nav { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
+.carousel-arrow {
+  width: 25px; height: 25px; padding: 0; border-radius: 50%;
+  display: grid; place-items: center; color: var(--text-2);
+  background: var(--surface); border: 1px solid var(--line);
+}
+.carousel-arrow:active { background: var(--primary-soft); color: var(--primary); }
+.carousel-arrow svg { width: 14px; height: 14px; }
+.carousel-count { min-width: 28px; text-align: center; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.subject-swipe {
+  display: flex; overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x mandatory; scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; -ms-overflow-style: none;
+  border-radius: var(--r-lg);
+}
+.subject-swipe::-webkit-scrollbar { display: none; }
+.subject-slide {
+  flex: 0 0 100%; width: 100%; min-width: 100%;
+  scroll-snap-align: start; scroll-snap-stop: always;
+  display: block; padding: 17px 18px 14px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-lg); box-shadow: var(--shadow-sm);
+  color: var(--text); text-decoration: none;
+}
+.subject-slide.is-active { border-color: rgba(108, 99, 255, .38); box-shadow: 0 8px 24px rgba(76, 59, 190, .10); }
+.subject-slide:active { transform: scale(.995); }
+.subject-slide-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.subject-badge {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 9px;
+  border-radius: 8px; background: var(--primary-soft); color: var(--primary);
+  font-size: 11px; font-weight: 750; letter-spacing: .01em;
+}
+.subject-kicker { margin-top: 12px; font-size: 10.5px; color: var(--muted); letter-spacing: .04em; }
+.subject-slide h3 {
+  margin: 3px 0 0; font-size: 16px; line-height: 1.4; font-weight: 750;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.subject-slide p { margin: 5px 0 10px; font-size: 11.5px; color: var(--muted); }
+.subject-slide .bar { height: 6px; margin: 0; }
+.subject-slide-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 11px; font-size: 11px; color: var(--primary); font-weight: 650;
+}
+.subject-slide-foot .go svg { width: 16px; height: 16px; }
+.carousel-dots { display: flex; justify-content: center; gap: 6px; padding-top: 9px; }
+.carousel-dot {
+  width: 6px; height: 6px; padding: 0; border-radius: 50%;
+  border: 0; background: var(--line-strong, rgba(120,110,150,.25));
+  transition: width .18s ease, background .18s ease;
+}
+.carousel-dot.active { width: 18px; border-radius: 4px; background: var(--primary); }
+
 .quick-grid {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
   margin-top: 18px;
@@ -66183,33 +66238,61 @@ window.SAMPLE_BANK = {
   function continueCard() {
     const s = Store.getSession();
     const rows = Store.recentBySubject();
-    let html = '<div class="section continue-section"><div class="section-head"><div><h2>继续学习</h2>' +
-      '<div class="sub">按科目保存学习进度</div></div></div>';
-
-    if (s && s.questionIds.length) {
-      const done = Object.keys(s.submitted).filter((k) => s.submitted[k]).length;
-      const p = Math.round((done / s.questionIds.length) * 100);
-      html += '<a class="continue" href="#/session">' +
-        '<span class="continue-ico">' + U.icon('play') + '</span>' +
-        '<span class="grow"><h3>继续上次</h3><p>' + U.escapeHtml(s.title) + ' · ' + done + '/' + s.questionIds.length + ' 题 · ' + p + '%</p>' +
-        '<div class="bar" style="margin-top:8px"><i style="width:' + p + '%"></i></div></span>' +
-        '<span class="go">' + U.icon('arrowRight') + '</span></a>';
+    const activeId = s && s.questionIds && s.questionIds.length ? s.subjectId : null;
+    let activeIndex = activeId ? rows.findIndex((r) => r.subject.id === activeId) : -1;
+    if (activeIndex < 0) activeIndex = rows.findIndex((r) => r.chapter);
+    if (activeIndex < 0) activeIndex = 0;
+    if (activeIndex > 0) {
+      const activeRow = rows.splice(activeIndex, 1)[0];
+      rows.unshift(activeRow);
+      activeIndex = 0;
     }
 
-    html += '<div class="card list-card" style="margin-top:' + (s ? '10px' : '0') + '">' +
-      rows.map((r) => {
-        const href = r.chapter
-          ? '#/chapter/' + encodeURIComponent(r.subject.id) + '/' + encodeURIComponent(r.chapter.id)
-          : '#/bank?s=' + encodeURIComponent(r.subject.id);
-        const title = r.chapter ? (r.chapter.no + ' ' + r.chapter.title) : '未开始';
-        return '<a class="list-row subject-progress-row" href="' + href + '">' +
-          '<span class="list-ico violet">' + U.icon('book') + '</span>' +
-          '<span class="list-main"><b>' + U.escapeHtml(r.subject.short || r.subject.name) + '</b>' +
-          '<span>' + U.escapeHtml(title) + (r.chapter ? ' · ' + r.done + '/' + r.total + ' 题' : '') + '</span>' +
-          (r.chapter ? '<div class="bar" style="margin-top:6px"><i style="width:' + r.progress + '%"></i></div>' : '') +
-          '</span><span class="chip ' + (r.progress >= 80 ? 'green' : r.progress ? 'violet' : '') + '">' + r.progress + '%</span></a>';
-      }).join('') + '</div></div>';
-    return html;
+    const slides = rows.map((r, i) => {
+      const isActive = !!(s && activeId === r.subject.id && s.questionIds.length);
+      let href, eyebrow, title, meta, pct, foot;
+      if (isActive) {
+        const done = Object.keys(s.submitted || {}).filter((k) => (s.submitted || {})[k]).length;
+        pct = s.questionIds.length ? Math.round((done / s.questionIds.length) * 100) : 0;
+        href = '#/session';
+        eyebrow = '继续上次';
+        title = s.title;
+        meta = done + '/' + s.questionIds.length + ' 题 · ' + pct + '%';
+        foot = '继续上次练习';
+      } else if (r.chapter) {
+        pct = r.progress;
+        href = '#/chapter/' + encodeURIComponent(r.subject.id) + '/' + encodeURIComponent(r.chapter.id);
+        eyebrow = '上次学到';
+        title = r.chapter.no + ' ' + r.chapter.title;
+        meta = r.done + '/' + r.total + ' 题 · ' + pct + '%';
+        foot = '继续这一章';
+      } else {
+        pct = 0;
+        href = '#/bank?s=' + encodeURIComponent(r.subject.id);
+        eyebrow = '尚未开始';
+        title = '从题库选择章节';
+        meta = '共 ' + r.subject.chapters.reduce((n, c) => n + c.questions.length, 0) + ' 题';
+        foot = '去题库';
+      }
+      return '<a class="subject-slide' + (isActive ? ' is-active' : '') + '" href="' + href + '" data-subject-id="' + U.escapeHtml(r.subject.id) + '">' +
+        '<div class="subject-slide-top"><span class="subject-badge">' + U.escapeHtml(r.subject.short || r.subject.name) + '</span>' +
+        '<span class="chip ' + (pct >= 80 ? 'green' : pct ? 'violet' : '') + '">' + pct + '%</span></div>' +
+        '<div class="subject-kicker">' + eyebrow + '</div>' +
+        '<h3>' + U.escapeHtml(title) + '</h3>' +
+        '<p>' + meta + '</p>' +
+        '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+        '<div class="subject-slide-foot"><span>' + foot + '</span><span class="go">' + U.icon('arrowRight') + '</span></div></a>';
+    }).join('');
+
+    const dots = rows.map((r, i) => '<button class="carousel-dot' + (i === activeIndex ? ' active' : '') + '" data-car-dot="' + i + '" aria-label="切换到' + U.escapeHtml(r.subject.short || r.subject.name) + '"></button>').join('');
+
+    return '<div class="section continue-section"><div class="section-head"><div><h2>继续学习</h2>' +
+      '<div class="sub">左右滑动切换科目 · 每科单独记录进度</div></div>' +
+      '<div class="carousel-nav"><button class="carousel-arrow" data-car-prev aria-label="上一科">' + U.icon('chevronLeft') + '</button>' +
+      '<span class="carousel-count" data-car-count>' + (activeIndex + 1) + '/' + rows.length + '</span>' +
+      '<button class="carousel-arrow" data-car-next aria-label="下一科">' + U.icon('chevronRight') + '</button></div></div>' +
+      '<div class="subject-swipe" data-subject-swipe>' + slides + '</div>' +
+      '<div class="carousel-dots">' + dots + '</div></div>';
   }
 
   function weekStrip() {
@@ -66297,6 +66380,58 @@ window.SAMPLE_BANK = {
     },
 
     mount(root) {
+      const swipe = root.querySelector('[data-subject-swipe]');
+      if (swipe) {
+        const slides = Array.from(swipe.querySelectorAll('.subject-slide'));
+        const dots = Array.from(root.querySelectorAll('[data-car-dot]'));
+        const count = root.querySelector('[data-car-count]');
+        const current = () => {
+          const w = swipe.clientWidth || 1;
+          return Math.max(0, Math.min(slides.length - 1, Math.round(swipe.scrollLeft / w)));
+        };
+        const sync = () => {
+          const i = current();
+          if (count) count.textContent = (i + 1) + '/' + slides.length;
+          dots.forEach((d, k) => d.classList.toggle('active', k === i));
+        };
+        const goTo = (i) => {
+          const n = Math.max(0, Math.min(slides.length - 1, i));
+          swipe.scrollTo({ left: n * swipe.clientWidth, behavior: 'smooth' });
+          if (count) count.textContent = (n + 1) + '/' + slides.length;
+          dots.forEach((d, k) => d.classList.toggle('active', k === n));
+        };
+        const initial = Math.max(0, slides.findIndex((x) => x.classList.contains('is-active')));
+        let focusTries = 0;
+        const focusInitial = () => {
+          const w = swipe.clientWidth;
+          if (!w || swipe.scrollWidth < w * slides.length - 2) {
+            if (focusTries++ < 40) setTimeout(focusInitial, 50);
+            return;
+          }
+          swipe.scrollLeft = initial * w;
+          sync();
+        };
+        setTimeout(focusInitial, 80);
+        swipe.addEventListener('scroll', () => {
+          if (swipe._carRaf) cancelAnimationFrame(swipe._carRaf);
+          swipe._carRaf = requestAnimationFrame(sync);
+        }, { passive: true });
+        root.querySelectorAll('[data-car-prev]').forEach((b) => b.addEventListener('click', () => goTo(current() - 1)));
+        root.querySelectorAll('[data-car-next]').forEach((b) => b.addEventListener('click', () => goTo(current() + 1)));
+        dots.forEach((d) => d.addEventListener('click', () => goTo(Number(d.dataset.carDot))));
+        let sx = 0, sy = 0, dragging = false;
+        swipe.addEventListener('pointerdown', (e) => {
+          if (e.pointerType !== 'mouse') return;
+          sx = e.clientX; sy = e.clientY; dragging = true;
+        });
+        swipe.addEventListener('pointerup', (e) => {
+          if (!dragging) return;
+          dragging = false;
+          const dx = e.clientX - sx;
+          const dy = e.clientY - sy;
+          if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) goTo(current() + (dx < 0 ? 1 : -1));
+        });
+      }
       const drill = root.querySelector('[data-act="drill"]');
       if (!drill) return;
       drill.addEventListener('click', () => {
