@@ -482,6 +482,51 @@ html[data-theme="dark"] .tabbar { box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45); }
 .q-drill { background: var(--blue-soft); color: var(--blue); }
 .q-mistake { background: var(--red-soft); color: var(--red); }
 
+/* ---------- APK download (web only) ---------- */
+.apk-banner {
+  position: relative; overflow: hidden;
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 18px; padding: 14px 15px;
+  border-radius: 20px; border: 1px solid #ffd6d6;
+  background: linear-gradient(135deg, #fff8f8 0%, #ffecec 55%, #ffe1e1 100%);
+  box-shadow: 0 8px 24px rgba(229, 57, 53, .08);
+  text-decoration: none; color: var(--text);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.apk-banner::after {
+  content: ''; position: absolute; right: -26px; top: -34px;
+  width: 108px; height: 108px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 90, 95, .16), rgba(255, 90, 95, 0) 68%);
+  pointer-events: none;
+}
+.apk-banner:active { transform: scale(.99); box-shadow: 0 4px 14px rgba(229, 57, 53, .10); }
+.apk-banner-icon {
+  position: relative; z-index: 1; flex: 0 0 auto;
+  width: 44px; height: 44px; border-radius: 13px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, #ff5a5f, #e53935 60%, #ff8a80);
+  color: #fff; font-size: 25px; font-weight: 900; line-height: 1;
+  box-shadow: 0 7px 16px rgba(229, 57, 53, .22);
+}
+.apk-banner-main { position: relative; z-index: 1; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.apk-kicker { font-size: 9px; font-weight: 800; letter-spacing: .14em; color: #d9363e; }
+.apk-banner-main b { font-size: 14px; font-weight: 800; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apk-banner-main > span:last-child { font-size: 10.5px; color: #8c6a6a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apk-banner-action {
+  position: relative; z-index: 1; flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 32px; padding: 0 11px; border-radius: 999px;
+  background: linear-gradient(135deg, #ff5a5f, #e53935);
+  color: #fff; font-size: 11px; font-weight: 750;
+  box-shadow: 0 6px 14px rgba(229, 57, 53, .22);
+}
+.apk-banner-action svg { width: 14px; height: 14px; }
+@media (max-width: 370px) {
+  .apk-banner-main > span:last-child { display: none; }
+  .apk-banner-action span { display: none; }
+  .apk-banner-action { width: 32px; padding: 0; justify-content: center; }
+}
+
 .insight { padding: 18px; }
 .streak-pill {
   display: inline-flex; align-items: center; gap: 5px;
@@ -64896,13 +64941,29 @@ window.SAMPLE_BANK = {
     }
   }
 
+  function isNativeApp() {
+    try {
+      if (window.AndroidHaptic && typeof window.AndroidHaptic.vibrate === 'function') return true;
+      if (/NeuBlowoffClassesApp/i.test(navigator.userAgent)) return true;
+      if (location.protocol === 'file:' && /;\s*wv\)/i.test(navigator.userAgent)) return true;
+    } catch (e) {}
+    return false;
+  }
+
+  function apkURL() {
+    if (location.protocol === 'blob:' || location.protocol === 'data:') {
+      return 'https://pinetree-445.github.io/neublowoffclasses/NeuBlowoffClasses.apk';
+    }
+    return 'NeuBlowoffClasses.apk';
+  }
+
   window.U = {
     $, $$, icon, applyIcons, escapeHtml, renderRich, plainText, renderMath,
     iconStars, ring, clamp, pct, uid, shuffle, sample, startOfDay, dayKey, addDays,
     formatClock, formatDuration, formatDate, formatDateTime, relTime, greeting,
     normalizeAnswer, checkFill, typeLabel, typeIcon, correctAnswerText, answerForCheck,
     isCorrect, scoreSubjective, normalizeAnswerText, toast, haptic, answerFeedback, openSheet, closeOverlay, confirmDialog, promptDialog,
-    download, readFile, debounce, mathCache, safeReplaceState
+    download, readFile, debounce, mathCache, safeReplaceState, isNativeApp, apkURL
   };
 })();
 
@@ -66352,6 +66413,15 @@ window.SAMPLE_BANK = {
       '<div class="carousel-dots">' + dots + '</div></div>';
   }
 
+  function apkBanner() {
+    if (U.isNativeApp()) return '';
+    return '<a class="apk-banner" href="' + U.apkURL() + '" download="NeuBlowoffClasses.apk">' +
+      '<span class="apk-banner-icon">N</span>' +
+      '<span class="apk-banner-main"><span class="apk-kicker">ANDROID 离线版</span>' +
+      '<b>安装 NeuBlowoffClasses APK</b><span>无需浏览器，安装后直接打开</span></span>' +
+      '<span class="apk-banner-action">' + U.icon('download') + '<span>下载</span></span></a>';
+  }
+
   function weekStrip() {
     const week = Store.weekStats(7);
     const labels = ['日', '一', '二', '三', '四', '五', '六'];
@@ -66421,6 +66491,8 @@ window.SAMPLE_BANK = {
         '<button class="quick" data-act="drill"><span class="quick-ico q-drill">' + U.icon('brain') + '</span><span>专项训练</span></button>' +
         '<a class="quick" href="#/mistakes"><span class="quick-ico q-mistake">' + U.icon('note') + '</span><span>错题本</span></a>' +
         '</div>' +
+
+        apkBanner() +
 
         '<div class="section"><div class="section-head"><div><h2>学习洞察</h2><div class="sub">本周学习情况一览</div></div>' +
         '<span class="streak-pill">' + U.icon('fire') + '连续 ' + streak + ' 天</span></div>' +
@@ -68530,6 +68602,10 @@ window.Views.bank = window.Views.drill;
         row('#/data', 'violet', 'database', '数据管理', '导入题库、备份与恢复') +
         row('#/settings', '', 'settings', '设置', '主题、字号与答题偏好') +
         row('#/thanks', 'orange', 'star', '致谢', '感谢原软件 NeuMathe') +
+        (U.isNativeApp() ? '' : '<a class="list-row" href="' + U.apkURL() + '" download="NeuBlowoffClasses.apk">' +
+          '<span class="list-ico red">' + U.icon('download') + '</span>' +
+          '<span class="list-main"><b>下载 Android 版</b><span>APK 离线安装包，安装后无需浏览器</span></span>' +
+          '<span class="chev">' + U.icon('chevronRight') + '</span></a>') +
         '<button class="list-row" data-about style="width:100%;text-align:left">' +
         '<span class="list-ico">' + U.icon('info') + '</span><span class="list-main"><b>关于NeuBlowoffClasses</b>' +
         '<span>离线刷题 · v1.0.0</span></span><span class="chev">' + U.icon('chevronRight') + '</span></button>' +
