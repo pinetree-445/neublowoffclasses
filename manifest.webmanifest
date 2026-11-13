@@ -1,0 +1,25 @@
+{
+  "name": "NeuBlowoffClasses",
+  "short_name": "NeuBlowoffClasses",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f5ff",
+  "theme_color": "#6c63ff",
+  "icons": [
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.neublowoffclasses.app",
+      "url": "https://pinetree-445.github.io/neublowoffclasses/NeuBlowoffClasses.apk"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.neublowoffclasses.app",
+      "sha256_cert_fingerprints": [
+        "4C:D5:FB:D9:9F:2E:59:47:AD:E3:3B:65:51:06:05:9F:AC:2E:6B:AA:C2:6F:80:DA:3E:03:A3:D6:0F:35:12:A0"
+      ]
+    }
+  }
+]
